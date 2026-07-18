@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#59d7ff"/>
+      <stop offset="1" stop-color="#1c6ea8"/>
+    </linearGradient>
+  </defs>
+  <circle cx="50" cy="50" r="47" fill="#0a0e18" stroke="url(#g)" stroke-width="3.5"/>
+  <circle cx="50" cy="50" r="38" fill="none" stroke="#59d7ff" stroke-opacity="0.25" stroke-width="1"/>
+  <!-- stylized jet silhouette -->
+  <g fill="url(#g)">
+    <path d="M50 16 L54 38 L76 58 L76 64 L55 54 L54 66 L62 74 L62 79 L50 74 L38 79 L38 74 L46 66 L45 54 L24 64 L24 58 L46 38 Z"/>
+  </g>
+  <!-- ace spade -->
+  <path d="M50 40 C46 46 42 48 42 52 C42 55 45 57 48 55 C47 58 46 59 44 61 L56 61 C54 59 53 58 52 55 C55 57 58 55 58 52 C58 48 54 46 50 40 Z"
+        fill="#05070d" opacity="0.85"/>
+</svg>

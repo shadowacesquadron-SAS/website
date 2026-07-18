@@ -1,0 +1,17 @@
+{
+  "discordInvite": "https://discord.gg/PLACEHOLDER",
+  "stats": [
+    { "value": "24/7", "label": "Persistent server ops" },
+    { "value": "2×", "label": "Weekly training nights" },
+    { "value": "MILSIM-LITE", "label": "Real brevity, zero paperwork" },
+    { "value": "ALL TZ", "label": "NA / EU / OCE flights" }
+  ],
+  "gallery": [
+    { "src": "assets/gallery/placeholder.svg", "alt": "Awaiting gun-camera footage" },
+    { "src": "assets/gallery/placeholder.svg", "alt": "Awaiting gun-camera footage" },
+    { "src": "assets/gallery/placeholder.svg", "alt": "Awaiting gun-camera footage" },
+    { "src": "assets/gallery/placeholder.svg", "alt": "Awaiting gun-camera footage" },
+    { "src": "assets/gallery/placeholder.svg", "alt": "Awaiting gun-camera footage" },
+    { "src": "assets/gallery/placeholder.svg", "alt": "Awaiting gun-camera footage" }
+  ]
+}

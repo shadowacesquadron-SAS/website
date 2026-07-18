@@ -1,0 +1,8 @@
+[
+  { "callsign": "SPECTER", "role": "Squadron Lead", "aircraft": "F-16C Viper" },
+  { "callsign": "VANDAL", "role": "Executive Officer", "aircraft": "F/A-18C Hornet" },
+  { "callsign": "HAVOC", "role": "Weapons & Tactics", "aircraft": "F-15E Strike Eagle" },
+  { "callsign": "GHOSTRIDER", "role": "Training Officer", "aircraft": "F-14B Tomcat" },
+  { "callsign": "STATIC", "role": "Comms / SRS Admin", "aircraft": "A-10C II Warthog" },
+  { "callsign": "YOUR CALLSIGN", "role": "Recruit — this could be you", "aircraft": "Any full-fidelity module" }
+]

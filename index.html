@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shadow Ace Squadron — SAS | DCS World Virtual Squadron</title>
+  <meta name="description" content="Shadow Ace Squadron (SAS) — a DCS World virtual squadron. Precision. Brotherhood. Night ops. Apply to fly with us." />
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="css/fonts.css" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./js/vendor/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- 3D background canvas (fixed, full viewport) -->
+  <canvas id="scene"></canvas>
+  <div id="vignette"></div>
+
+  <!-- Loading screen -->
+  <div id="loader">
+    <div class="loader-inner">
+      <div class="loader-ring"></div>
+      <span class="loader-text">SPOOLING ENGINES</span>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav id="nav">
+    <a class="nav-brand" href="#top">
+      <img src="assets/logo.svg" alt="SAS roundel" class="nav-logo" />
+      <span>SHADOW&nbsp;ACE</span>
+    </a>
+    <button id="nav-toggle" aria-label="Menu"><span></span><span></span><span></span></button>
+    <ul class="nav-links">
+      <li><a href="#about">About</a></li>
+      <li><a href="#roster">Roster</a></li>
+      <li><a href="#operations">Operations</a></li>
+      <li><a href="#gallery">Gallery</a></li>
+      <li><a href="#join" class="nav-cta">Join Us</a></li>
+    </ul>
+  </nav>
+
+  <main id="top">
+    <!-- HERO -->
+    <header class="hero">
+      <div class="hero-content reveal">
+        <p class="hero-kicker">// DCS WORLD VIRTUAL SQUADRON</p>
+        <h1 class="hero-title">SHADOW&nbsp;ACE<br />SQUADRON</h1>
+        <p class="hero-sub">Own the night. Fly with precision. Leave only contrails.</p>
+        <div class="hero-actions">
+          <a href="#join" class="btn btn-primary">APPLY TO FLY</a>
+          <a href="#about" class="btn btn-ghost">MEET THE SQUADRON</a>
+        </div>
+      </div>
+      <div class="hero-scroll"><span></span>SCROLL</div>
+    </header>
+
+    <!-- ABOUT -->
+    <section id="about" class="section">
+      <div class="panel reveal">
+        <p class="section-kicker">// WHO WE ARE</p>
+        <h2 class="section-title">BUILT FOR THE DARK</h2>
+        <div class="about-grid">
+          <div class="about-text">
+            <p>
+              Shadow Ace Squadron is a <strong>DCS World</strong> virtual squadron flying
+              full-fidelity modules with milsim-lite discipline: real brevity, real planning,
+              real teamwork — without the paperwork. We run structured training nights,
+              persistent campaigns, and large-force packages against a living, breathing
+              opposition.
+            </p>
+            <p>
+              Whether you're strapping into your first startup tutorial or you've got a
+              thousand hours in the pit, if you bring attitude, availability, and a working
+              mic — we'll bring the mission.
+            </p>
+          </div>
+          <ul class="stat-list" id="stat-list">
+            <!-- populated by js/main.js from data/site.json -->
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ROSTER -->
+    <section id="roster" class="section">
+      <div class="panel reveal">
+        <p class="section-kicker">// THE PILOTS</p>
+        <h2 class="section-title">SQUADRON ROSTER</h2>
+        <div class="roster-grid" id="roster-grid">
+          <!-- populated by js/main.js from data/roster.json -->
+        </div>
+      </div>
+    </section>
+
+    <!-- OPERATIONS -->
+    <section id="operations" class="section">
+      <div class="panel reveal">
+        <p class="section-kicker">// MISSION BOARD</p>
+        <h2 class="section-title">OPERATIONS &amp; EVENTS</h2>
+        <div class="ops-list" id="ops-list">
+          <!-- populated by js/main.js from data/ops.json -->
+        </div>
+      </div>
+    </section>
+
+    <!-- GALLERY -->
+    <section id="gallery" class="section">
+      <div class="panel reveal">
+        <p class="section-kicker">// GUN CAMERA</p>
+        <h2 class="section-title">MEDIA GALLERY</h2>
+        <div class="gallery-grid" id="gallery-grid">
+          <!-- populated by js/main.js from data/site.json gallery entries -->
+        </div>
+        <p class="gallery-note">Drop your best screenshots in <code>assets/gallery/</code> and list them in <code>data/site.json</code>.</p>
+      </div>
+    </section>
+
+    <!-- JOIN -->
+    <section id="join" class="section">
+      <div class="panel panel-cta reveal">
+        <p class="section-kicker">// RECRUITMENT</p>
+        <h2 class="section-title">EARN THE PATCH</h2>
+        <p class="join-text">
+          No gatekeeping, no drama — just standards. Hop into our Discord, say hello in
+          <strong>#flight-desk</strong>, and fly a check ride with us this week.
+        </p>
+        <a id="discord-btn" class="btn btn-primary btn-lg" href="#" target="_blank" rel="noopener">
+          JOIN THE DISCORD
+        </a>
+        <p class="join-smallprint">18+ · English comms · SRS/TeamSpeak · All timezones welcome</p>
+      </div>
+    </section>
+
+    <footer>
+      <img src="assets/logo.svg" alt="SAS roundel" class="footer-logo" />
+      <p>SHADOW ACE SQUADRON — est. 2026. Not affiliated with Eagle Dynamics. DCS World is a trademark of Eagle Dynamics SA.</p>
+    </footer>
+  </main>
+
+  <script type="module" src="js/scene.js"></script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
