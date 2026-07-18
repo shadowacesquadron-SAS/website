@@ -1,8 +1,8 @@
 // ============================================================
-// Shadow Ace Squadron — cinematic hero scene
-// Stylized jet flythrough: night sky, moonlit clouds, afterburner,
-// countermeasure flares, lens flare. No external assets — all
-// geometry & textures are generated procedurally at runtime.
+// Shadow Ace Squadron — cinematic hero: GOLDEN HOUR PURSUIT
+// A lone jet banks through sunset cloud tops, a missile on its
+// six trailing smoke, countermeasure flares blazing. All
+// procedural — no external assets.
 // ============================================================
 import * as THREE from "three";
 
@@ -11,16 +11,15 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 1.05;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x05070d);
-scene.fog = new THREE.FogExp2(0x05070d, 0.0048);
+scene.fog = new THREE.FogExp2(0x8a4a28, 0.0042);
 
-const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 600);
+const camera = new THREE.PerspectiveCamera(56, window.innerWidth / window.innerHeight, 0.1, 900);
 
 // ---------------- procedural textures ----------------
-function radialSpriteTexture(inner, outer, size = 128) {
+function radialTex(inner, outer, size = 128) {
   const c = document.createElement("canvas");
   c.width = c.height = size;
   const g = c.getContext("2d");
@@ -34,276 +33,290 @@ function radialSpriteTexture(inner, outer, size = 128) {
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
-const softWhite = radialSpriteTexture("rgba(255,255,255,1)", "rgba(180,220,255,0.45)");
-const cloudTex = radialSpriteTexture("rgba(150,170,205,0.5)", "rgba(90,110,150,0.16)", 256);
-const flareTex = radialSpriteTexture("rgba(255,240,200,1)", "rgba(255,150,60,0.5)");
-const burnerTex = radialSpriteTexture("rgba(190,230,255,1)", "rgba(80,150,255,0.5)");
+const softTex = radialTex("rgba(255,255,255,1)", "rgba(255,220,180,0.45)");
+const cloudTex = radialTex("rgba(255,225,200,0.55)", "rgba(150,110,110,0.18)", 256);
+const smokeTex = radialTex("rgba(235,225,215,0.85)", "rgba(120,100,95,0.30)", 128);
+const flareTex = radialTex("rgba(255,245,215,1)", "rgba(255,150,60,0.55)");
+const burnTex = radialTex("rgba(255,240,220,1)", "rgba(255,140,70,0.5)");
 
-// ---------------- lighting ----------------
-scene.add(new THREE.AmbientLight(0x1a2438, 0.7));
-const moon = new THREE.DirectionalLight(0xbfd4ff, 2.7);
-moon.position.set(-40, 60, -30);
-scene.add(moon);
-const rim = new THREE.DirectionalLight(0x2a70ff, 0.9);
-rim.position.set(30, -18, 40);
-scene.add(rim);
-
-// ---------------- starfield ----------------
+// ---------------- sky dome (gradient) ----------------
 {
-  const N = 1600;
-  const pos = new Float32Array(N * 3);
-  for (let i = 0; i < N; i++) {
-    const r = 250 + Math.random() * 250;
-    const th = Math.random() * Math.PI * 2;
-    const ph = Math.acos(2 * Math.random() - 1);
-    pos[i * 3] = r * Math.sin(ph) * Math.cos(th);
-    pos[i * 3 + 1] = Math.abs(r * Math.cos(ph)) * 0.7 - 20;
-    pos[i * 3 + 2] = r * Math.sin(ph) * Math.sin(th);
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  const mat = new THREE.PointsMaterial({
-    size: 1.5, map: softWhite, transparent: true, opacity: 1,
-    depthWrite: false, blending: THREE.AdditiveBlending, color: 0xcfe2ff,
-    sizeAttenuation: true, fog: false,
-  });
-  scene.add(new THREE.Points(geo, mat));
+  const c = document.createElement("canvas");
+  c.width = 4; c.height = 512;
+  const g = c.getContext("2d");
+  const grad = g.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0.00, "#131c33");   // zenith — cool indigo
+  grad.addColorStop(0.42, "#3c2c47");   // violet transition
+  grad.addColorStop(0.60, "#8a4132");   // burnt orange
+  grad.addColorStop(0.715, "#e07a35");  // horizon glow
+  grad.addColorStop(0.76, "#ffb257");   // sun band
+  grad.addColorStop(0.82, "#a04c22");   // below horizon haze
+  grad.addColorStop(1.00, "#341a10");   // under-cloud murk
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 4, 512);
+  const skyTex = new THREE.CanvasTexture(c);
+  skyTex.colorSpace = THREE.SRGBColorSpace;
+  const dome = new THREE.Mesh(
+    new THREE.SphereGeometry(420, 32, 24),
+    new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false })
+  );
+  scene.add(dome);
 }
 
-// ---------------- moon disc ----------------
+// ---------------- sun + glow ----------------
+const SUN = new THREE.Vector3(-190, 30, -300);
 {
-  const moonSprite = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: radialSpriteTexture("rgba(240,248,255,1)", "rgba(190,215,255,0.35)", 256),
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.95,
+  const glow3 = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: radialTex("rgba(255,190,120,0.55)", "rgba(255,140,70,0.18)", 256),
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
   }));
-  moonSprite.position.set(-120, 95, -220);
-  moonSprite.scale.setScalar(46);
-  scene.add(moonSprite);
+  glow3.position.copy(SUN); glow3.scale.setScalar(340); scene.add(glow3);
+  const glow2 = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: radialTex("rgba(255,215,150,0.9)", "rgba(255,160,80,0.35)", 256),
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+  }));
+  glow2.position.copy(SUN); glow2.scale.setScalar(150); scene.add(glow2);
+  const disc = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: radialTex("rgba(255,248,230,1)", "rgba(255,205,130,0.9)", 256),
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+  }));
+  disc.position.copy(SUN); disc.scale.setScalar(56); scene.add(disc);
 }
 
-// ---------------- cloud deck (billboard sprites) ----------------
+// ---------------- lighting: teal & orange grade ----------------
+scene.add(new THREE.AmbientLight(0x3a2c3e, 1.0));
+const sunLight = new THREE.DirectionalLight(0xffa050, 3.2);
+sunLight.position.copy(SUN);
+scene.add(sunLight);
+const coolFill = new THREE.DirectionalLight(0x2e5a6e, 0.8);
+coolFill.position.set(190, 60, 300);
+scene.add(coolFill);
+
+// ---------------- cloud decks ----------------
 const clouds = new THREE.Group();
 {
-  for (let i = 0; i < 70; i++) {
+  // low deck — the "floor" of the scene, sun-warmed
+  for (let i = 0; i < 85; i++) {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({
       map: cloudTex, transparent: true, depthWrite: false,
-      opacity: 0.07 + Math.random() * 0.13, color: 0x8ba3cf,
+      opacity: 0.12 + Math.random() * 0.16,
+      color: new THREE.Color().setHSL(0.05 + Math.random() * 0.04, 0.5, 0.42 + Math.random() * 0.2),
     }));
-    s.position.set(
-      (Math.random() - 0.5) * 460,
-      -38 - Math.random() * 40,
-      (Math.random() - 0.5) * 460
-    );
-    const sc = 40 + Math.random() * 80;
-    s.scale.set(sc, sc * 0.42, 1);
-    s.userData.drift = 0.4 + Math.random() * 0.9;
+    s.position.set((Math.random() - 0.5) * 480, -34 - Math.random() * 38, (Math.random() - 0.5) * 480);
+    const sc = 42 + Math.random() * 85;
+    s.scale.set(sc, sc * 0.38, 1);
+    s.userData.drift = 0.5 + Math.random() * 1.0;
+    clouds.add(s);
+  }
+  // distant towers near the sun — dramatic backlit masses
+  for (let i = 0; i < 14; i++) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: cloudTex, transparent: true, depthWrite: false,
+      opacity: 0.2 + Math.random() * 0.2, color: 0x5a3040, fog: false,
+    }));
+    const a = -0.55 - Math.random() * 0.5; // cluster around the sun azimuth
+    s.position.set(Math.sin(a) * 330, -8 + Math.random() * 34, Math.cos(a) * -330 + (Math.random() - 0.5) * 60);
+    const sc = 60 + Math.random() * 120;
+    s.scale.set(sc, sc * 0.55, 1);
+    s.userData.drift = 0.15;
     clouds.add(s);
   }
   scene.add(clouds);
 }
 
-// ---------------- stylized jet (F-22-inspired, from primitives) ----------------
+// ---------------- trail emitter (smoke / vortices) ----------------
+class Trail {
+  constructor(n, tex, baseColor) {
+    this.pool = [];
+    this.cursor = 0;
+    for (let i = 0; i < n; i++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: tex, transparent: true, depthWrite: false, opacity: 0, color: baseColor,
+      }));
+      s.visible = false;
+      scene.add(s);
+      this.pool.push({ s, life: 0, maxLife: 1, grow: 0, vel: new THREE.Vector3() });
+    }
+  }
+  emit(pos, scale, life, grow, jitter = 0, vel = null) {
+    const p = this.pool[this.cursor];
+    this.cursor = (this.cursor + 1) % this.pool.length;
+    p.life = p.maxLife = life;
+    p.grow = grow;
+    p.s.visible = true;
+    p.s.position.copy(pos);
+    if (jitter) p.s.position.add(new THREE.Vector3(
+      (Math.random() - 0.5) * jitter, (Math.random() - 0.5) * jitter, (Math.random() - 0.5) * jitter));
+    p.s.scale.setScalar(scale);
+    p.vel.copy(vel || ZERO);
+  }
+  update(dt) {
+    for (const p of this.pool) {
+      if (!p.s.visible) continue;
+      p.life -= dt;
+      if (p.life <= 0) { p.s.visible = false; continue; }
+      const k = p.life / p.maxLife;
+      p.s.material.opacity = 0.5 * k * k;
+      p.s.scale.addScalar(p.grow * dt);
+      p.s.position.addScaledVector(p.vel, dt);
+    }
+  }
+}
+const ZERO = new THREE.Vector3();
+const missileSmoke = new Trail(320, smokeTex, 0xd8cfc6);
+const wingVortL = new Trail(70, smokeTex, 0xf0e8e2);
+const wingVortR = new Trail(70, smokeTex, 0xf0e8e2);
+
+// ---------------- jet ----------------
 function buildJet() {
   const jet = new THREE.Group();
-  const hull = new THREE.MeshStandardMaterial({
-    color: 0x1d2431, metalness: 0.8, roughness: 0.38, flatShading: true,
-  });
-  const dark = new THREE.MeshStandardMaterial({
-    color: 0x10141d, metalness: 0.65, roughness: 0.5, flatShading: true,
-  });
+  const hull = new THREE.MeshStandardMaterial({ color: 0x252a35, metalness: 0.85, roughness: 0.35, flatShading: true });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x12161f, metalness: 0.7, roughness: 0.45, flatShading: true });
 
-  // fuselage — stretched, faceted
   const fus = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.6, 7.4, 7), hull);
-  fus.rotation.x = Math.PI / 2;
-  fus.scale.set(1, 1, 0.62); // flatten vertically
-  jet.add(fus);
-
-  // nose cone
+  fus.rotation.x = Math.PI / 2; fus.scale.set(1, 1, 0.62); jet.add(fus);
   const nose = new THREE.Mesh(new THREE.ConeGeometry(0.34, 2.3, 7), hull);
-  nose.rotation.x = Math.PI / 2;
-  nose.position.z = -4.8;
-  nose.scale.set(1, 1, 0.62);
-  jet.add(nose);
-
-  // canopy
+  nose.rotation.x = Math.PI / 2; nose.position.z = -4.8; nose.scale.set(1, 1, 0.62); jet.add(nose);
   const canopy = new THREE.Mesh(
     new THREE.SphereGeometry(0.42, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0x0e2438, metalness: 0.9, roughness: 0.1 })
-  );
-  canopy.scale.set(0.8, 0.55, 1.9);
-  canopy.position.set(0, 0.28, -2.4);
-  jet.add(canopy);
+    new THREE.MeshStandardMaterial({ color: 0x35201a, metalness: 0.95, roughness: 0.08 }));
+  canopy.scale.set(0.8, 0.55, 1.9); canopy.position.set(0, 0.28, -2.4); jet.add(canopy);
 
-  // main delta wings
   const wingShape = new THREE.Shape();
-  wingShape.moveTo(0, 0);
-  wingShape.lineTo(4.4, 2.6);
-  wingShape.lineTo(4.4, 3.6);
-  wingShape.lineTo(0.4, 2.4);
-  wingShape.closePath();
+  wingShape.moveTo(0, 0); wingShape.lineTo(4.4, 2.6); wingShape.lineTo(4.4, 3.6);
+  wingShape.lineTo(0.4, 2.4); wingShape.closePath();
   const wingGeo = new THREE.ExtrudeGeometry(wingShape, { depth: 0.1, bevelEnabled: false });
   const wingL = new THREE.Mesh(wingGeo, hull);
-  wingL.rotation.x = Math.PI / 2;
-  wingL.position.set(0.25, 0, -1.4);
-  jet.add(wingL);
-  const wingR = wingL.clone();
-  wingR.scale.x = -1;
-  wingR.position.x = -0.25;
-  jet.add(wingR);
+  wingL.rotation.x = Math.PI / 2; wingL.position.set(0.25, 0, -1.4); jet.add(wingL);
+  const wingR = wingL.clone(); wingR.scale.x = -1; wingR.position.x = -0.25; jet.add(wingR);
 
-  // canted twin tails
   const tailShape = new THREE.Shape();
-  tailShape.moveTo(0, 0);
-  tailShape.lineTo(1.5, 0.4);
-  tailShape.lineTo(1.9, 1.7);
-  tailShape.lineTo(0.9, 1.5);
-  tailShape.closePath();
+  tailShape.moveTo(0, 0); tailShape.lineTo(1.5, 0.4); tailShape.lineTo(1.9, 1.7);
+  tailShape.lineTo(0.9, 1.5); tailShape.closePath();
   const tailGeo = new THREE.ExtrudeGeometry(tailShape, { depth: 0.08, bevelEnabled: false });
   const tailL = new THREE.Mesh(tailGeo, dark);
-  tailL.rotation.y = Math.PI / 2;
-  tailL.rotation.z = 0.5;
-  tailL.position.set(0.62, 0.1, 1.7);
-  jet.add(tailL);
+  tailL.rotation.y = Math.PI / 2; tailL.rotation.z = 0.5; tailL.position.set(0.62, 0.1, 1.7); jet.add(tailL);
   const tailR = new THREE.Mesh(tailGeo, dark);
-  tailR.rotation.y = Math.PI / 2;
-  tailR.rotation.z = -0.5;
-  tailR.scale.z = -1;
-  tailR.position.set(-0.62, 0.1, 1.7);
-  jet.add(tailR);
+  tailR.rotation.y = Math.PI / 2; tailR.rotation.z = -0.5; tailR.scale.z = -1;
+  tailR.position.set(-0.62, 0.1, 1.7); jet.add(tailR);
 
-  // horizontal stabs
   const stabShape = new THREE.Shape();
-  stabShape.moveTo(0, 0);
-  stabShape.lineTo(1.9, 0.9);
-  stabShape.lineTo(1.9, 1.5);
-  stabShape.lineTo(0.3, 1.1);
-  stabShape.closePath();
+  stabShape.moveTo(0, 0); stabShape.lineTo(1.9, 0.9); stabShape.lineTo(1.9, 1.5);
+  stabShape.lineTo(0.3, 1.1); stabShape.closePath();
   const stabGeo = new THREE.ExtrudeGeometry(stabShape, { depth: 0.07, bevelEnabled: false });
   const stabL = new THREE.Mesh(stabGeo, dark);
-  stabL.rotation.x = Math.PI / 2;
-  stabL.position.set(0.3, 0, 2.2);
-  jet.add(stabL);
-  const stabR = stabL.clone();
-  stabR.scale.x = -1;
-  stabR.position.x = -0.3;
-  jet.add(stabR);
+  stabL.rotation.x = Math.PI / 2; stabL.position.set(0.3, 0, 2.2); jet.add(stabL);
+  const stabR = stabL.clone(); stabR.scale.x = -1; stabR.position.x = -0.3; jet.add(stabR);
 
-  // engine nozzles
   for (const sx of [-0.36, 0.36]) {
     const noz = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.5, 8), dark);
-    noz.rotation.x = Math.PI / 2;
-    noz.position.set(sx, -0.05, 3.75);
-    jet.add(noz);
+    noz.rotation.x = Math.PI / 2; noz.position.set(sx, -0.05, 3.75); jet.add(noz);
   }
-
-  // afterburner glow sprites + light
   const burners = [];
   for (const sx of [-0.36, 0.36]) {
     const b = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: burnerTex, transparent: true, depthWrite: false,
-      blending: THREE.AdditiveBlending, color: 0x9cd2ff,
+      map: burnTex, transparent: true, depthWrite: false,
+      blending: THREE.AdditiveBlending, color: 0xffc078,
     }));
-    b.position.set(sx, -0.05, 4.15);
-    b.scale.setScalar(1.15);
-    jet.add(b);
+    b.position.set(sx, -0.05, 4.15); b.scale.setScalar(1.2); jet.add(b);
     burners.push(b);
   }
-  const burnerLight = new THREE.PointLight(0x66aaff, 6, 26, 1.8);
-  burnerLight.position.set(0, 0, 4.4);
-  jet.add(burnerLight);
-
-  // nav strobes
-  const strobeL = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: softWhite, color: 0xff4455, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-  }));
-  strobeL.scale.setScalar(0.5);
-  strobeL.position.set(4.55, 0, 1.9);
-  jet.add(strobeL);
-  const strobeR = strobeL.clone();
-  strobeR.material = strobeL.material.clone();
-  strobeR.material.color.set(0x44ff88);
-  strobeR.position.x = -4.55;
-  jet.add(strobeR);
-
-  jet.userData = { burners, burnerLight, strobeL, strobeR };
+  const burnerLight = new THREE.PointLight(0xff9040, 5, 24, 1.8);
+  burnerLight.position.set(0, 0, 4.4); jet.add(burnerLight);
+  jet.userData = { burners, burnerLight };
   return jet;
 }
-
 const jet = buildJet();
 scene.add(jet);
 
-// wingman, further back
-const wingman = buildJet();
-wingman.scale.setScalar(0.8);
-scene.add(wingman);
+// ---------------- missile ----------------
+const missile = new THREE.Group();
+{
+  const body = new THREE.MeshStandardMaterial({ color: 0x8a8d94, metalness: 0.85, roughness: 0.3 });
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 2.6, 8), body);
+  m.rotation.x = Math.PI / 2; missile.add(m);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.55, 8), body);
+  tip.rotation.x = Math.PI / 2; tip.position.z = -1.55; missile.add(tip);
+  for (let i = 0; i < 4; i++) {
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.42, 0.5), body);
+    fin.position.z = 1.05;
+    fin.rotation.z = (i * Math.PI) / 2;
+    fin.position.x = Math.cos((i * Math.PI) / 2) * 0.25;
+    fin.position.y = Math.sin((i * Math.PI) / 2) * 0.25;
+    missile.add(fin);
+  }
+  const exhaust = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: burnTex, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, color: 0xffd9a0,
+  }));
+  exhaust.position.z = 1.55; exhaust.scale.setScalar(0.9); missile.add(exhaust);
+  const mLight = new THREE.PointLight(0xffb060, 2.5, 14, 2);
+  mLight.position.z = 1.7; missile.add(mLight);
+  scene.add(missile);
+}
 
 // ---------------- countermeasure flares ----------------
 const MAX_FLARES = 90;
 const flarePool = [];
-{
-  for (let i = 0; i < MAX_FLARES; i++) {
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: flareTex, transparent: true, depthWrite: false,
-      blending: THREE.AdditiveBlending, opacity: 0,
-    }));
-    s.visible = false;
-    scene.add(s);
-    flarePool.push({ sprite: s, life: 0, vel: new THREE.Vector3() });
-  }
+for (let i = 0; i < MAX_FLARES; i++) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: flareTex, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, opacity: 0,
+  }));
+  s.visible = false;
+  scene.add(s);
+  flarePool.push({ sprite: s, life: 0, vel: new THREE.Vector3() });
 }
 let flareCursor = 0;
-function popFlares(fromJet, count) {
+const flareLight = new THREE.PointLight(0xffc060, 0, 60, 1.6);
+scene.add(flareLight);
+function popFlares(count) {
   const origin = new THREE.Vector3();
-  fromJet.getWorldPosition(origin);
-  const back = new THREE.Vector3(0, 0, 1).applyQuaternion(fromJet.quaternion);
+  jet.getWorldPosition(origin);
+  const back = new THREE.Vector3(0, 0, 1).applyQuaternion(jet.quaternion);
   for (let i = 0; i < count; i++) {
     const f = flarePool[flareCursor];
     flareCursor = (flareCursor + 1) % MAX_FLARES;
-    f.life = 1;
+    f.life = 1.15;
     f.sprite.visible = true;
-    f.sprite.position.copy(origin).addScaledVector(back, 3.5);
-    f.vel.set(
-      (Math.random() - 0.5) * 9,
-      -3 - Math.random() * 5,
-      (Math.random() - 0.5) * 9
-    ).addScaledVector(back, 9 + Math.random() * 5);
-    f.sprite.scale.setScalar(1.4 + Math.random() * 1.1);
+    f.sprite.position.copy(origin).addScaledVector(back, 3.2);
+    f.vel.set((Math.random() - 0.5) * 11, -4 - Math.random() * 6, (Math.random() - 0.5) * 11)
+      .addScaledVector(back, 10 + Math.random() * 6);
+    f.sprite.scale.setScalar(1.5 + Math.random() * 1.2);
   }
+  flareLight.position.copy(origin).addScaledVector(back, 4);
+  flareLight.intensity = 46;
 }
 
-// ---------------- lens flare (custom sprite chain on the moon) ----------------
+// ---------------- lens flare ghosts (sun) ----------------
 const lensGroup = new THREE.Group();
 scene.add(lensGroup);
 const lensSprites = [];
 {
-  const colors = [0xaad4ff, 0x59d7ff, 0xffb454, 0x7dff9b, 0xaad4ff];
-  // sprites live ~0.4 units in front of the camera after unproject —
-  // scales must be tiny or they veil the whole frame
-  const scales = [0.10, 0.048, 0.030, 0.062, 0.022];
-  const offsets = [0.35, 0.55, 0.72, 0.9, 1.08];
+  const colors = [0xffd9a8, 0xffb257, 0xff8a4a, 0x7fd8d0, 0xffe2c0];
+  const scales = [0.11, 0.05, 0.032, 0.065, 0.024];
+  const offsets = [0.32, 0.52, 0.7, 0.88, 1.06];
   for (let i = 0; i < colors.length; i++) {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: softWhite, color: colors[i], transparent: true,
-      opacity: 0.22, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending,
+      map: softTex, color: colors[i], transparent: true,
+      opacity: 0.2, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, fog: false,
     }));
     s.scale.setScalar(scales[i]);
     lensGroup.add(s);
     lensSprites.push({ sprite: s, k: offsets[i] });
   }
 }
-const moonWorld = new THREE.Vector3(-120, 95, -220);
 function updateLensFlare() {
-  const ndc = moonWorld.clone().project(camera);
-  const onScreen = ndc.z < 1 && Math.abs(ndc.x) < 1.15 && Math.abs(ndc.y) < 1.15;
-  lensGroup.visible = onScreen;
-  if (!onScreen) return;
+  const ndc = SUN.clone().project(camera);
+  const on = ndc.z < 1 && Math.abs(ndc.x) < 1.2 && Math.abs(ndc.y) < 1.2;
+  lensGroup.visible = on;
+  if (!on) return;
   for (const { sprite, k } of lensSprites) {
-    const p = new THREE.Vector3(ndc.x * (1 - k) , ndc.y * (1 - k), 0.5).unproject(camera);
-    sprite.position.copy(p);
+    sprite.position.copy(new THREE.Vector3(ndc.x * (1 - k), ndc.y * (1 - k), 0.5).unproject(camera));
   }
 }
 
-// ---------------- flight path & camera choreography ----------------
+// ---------------- flight choreography ----------------
 const clock = new THREE.Clock();
 let scrollY = 0;
 window.addEventListener("scroll", () => { scrollY = window.scrollY; }, { passive: true });
@@ -313,17 +326,19 @@ window.addEventListener("pointermove", (e) => {
   mouse.y = (e.clientY / window.innerHeight) * 2 - 1;
 });
 
-let nextFlareAt = 3.5;
 const jetPos = new THREE.Vector3();
 const tmp = new THREE.Vector3();
+const mPos = new THREE.Vector3();
+const mAhead = new THREE.Vector3();
+let nextFlareAt = 2.2;
+let smokeAcc = 0, vortAcc = 0;
 
 function flightPos(t, out) {
-  // lazy figure-8 racetrack
-  const R = 26;
+  const R = 27;
   out.set(
-    Math.sin(t * 0.21) * R,
-    4 + Math.sin(t * 0.13) * 5,
-    Math.sin(t * 0.42) * R * 0.55
+    Math.sin(t * 0.20) * R,
+    5 + Math.sin(t * 0.14) * 5.5,
+    Math.sin(t * 0.40) * R * 0.55
   );
   return out;
 }
@@ -333,73 +348,92 @@ function animate() {
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = clock.elapsedTime;
 
-  // jet along path, oriented to velocity, banked into turns
+  // --- jet ---
   flightPos(t, jetPos);
   flightPos(t + 0.12, tmp);
   jet.position.copy(jetPos);
   const dir = tmp.clone().sub(jetPos);
   jet.lookAt(tmp);
-  jet.rotateY(Math.PI); // model faces -z
-  const bank = THREE.MathUtils.clamp(-dir.x * 0.35, -1.1, 1.1);
+  jet.rotateY(Math.PI);
+  const bank = THREE.MathUtils.clamp(-dir.x * 0.38, -1.15, 1.15);
   jet.rotateZ(bank);
+  const { burners, burnerLight } = jet.userData;
+  const flick = 0.9 + Math.random() * 0.4;
+  burners.forEach((b) => b.scale.setScalar(1.1 * flick));
+  burnerLight.intensity = 4.6 * flick;
 
-  // wingman trails in echelon
-  flightPos(t - 0.55, tmp);
-  wingman.position.copy(tmp).add(new THREE.Vector3(4.5, -1.4, 0));
-  flightPos(t - 0.43, tmp);
-  wingman.lookAt(tmp.add(new THREE.Vector3(4.5, -1.4, 0)));
-  wingman.rotateY(Math.PI);
-  wingman.rotateZ(bank * 0.8);
-
-  // afterburner flicker + strobes
-  for (const j of [jet, wingman]) {
-    const { burners, burnerLight, strobeL, strobeR } = j.userData;
-    const flick = 0.9 + Math.random() * 0.35;
-    burners.forEach((b) => b.scale.setScalar(1.05 * flick));
-    burnerLight.intensity = 5.2 * flick;
-    const blink = Math.sin(t * 9) > 0.94 ? 1 : 0.12;
-    strobeL.material.opacity = blink;
-    strobeR.material.opacity = blink;
+  // wingtip vortices during hard banking
+  vortAcc += dt;
+  if (Math.abs(bank) > 0.55 && vortAcc > 0.028) {
+    vortAcc = 0;
+    const q = jet.quaternion;
+    const tipL = new THREE.Vector3(4.5, 0, 1.2).applyQuaternion(q).add(jetPos);
+    const tipR = new THREE.Vector3(-4.5, 0, 1.2).applyQuaternion(q).add(jetPos);
+    wingVortL.emit(tipL, 0.5, 1.1, 1.4, 0.1);
+    wingVortR.emit(tipR, 0.5, 1.1, 1.4, 0.1);
   }
 
-  // periodic countermeasure flares
+  // --- missile: pursues along the path, weaving, never quite catching ---
+  const lag = 0.62 + Math.sin(t * 0.23) * 0.22;         // gains and falls back
+  flightPos(t - lag, mPos);
+  flightPos(t - lag + 0.1, mAhead);
+  const weave = Math.sin(t * 2.1) * 1.6;
+  const wv = new THREE.Vector3(Math.cos(t * 0.2), 0.4 * Math.sin(t * 1.3), 0).multiplyScalar(weave * 0.5);
+  mPos.add(wv);
+  missile.position.copy(mPos);
+  missile.lookAt(mAhead.add(wv));
+  missile.rotateY(Math.PI);
+
+  smokeAcc += dt;
+  if (smokeAcc > 0.022) {
+    smokeAcc = 0;
+    const back = new THREE.Vector3(0, 0, 1.8).applyQuaternion(missile.quaternion).add(mPos);
+    missileSmoke.emit(back, 0.65 + Math.random() * 0.3, 2.6, 2.1, 0.16,
+      new THREE.Vector3(0, 0.35, 0));
+  }
+
+  missileSmoke.update(dt);
+  wingVortL.update(dt);
+  wingVortR.update(dt);
+
+  // --- flares ---
   if (t > nextFlareAt) {
-    popFlares(Math.random() > 0.4 ? jet : wingman, 7 + Math.floor(Math.random() * 6));
-    nextFlareAt = t + 4 + Math.random() * 5;
+    popFlares(8 + Math.floor(Math.random() * 6));
+    nextFlareAt = t + 2.6 + Math.random() * 3.4;
   }
+  flareLight.intensity *= Math.pow(0.06, dt); // fast decay
   for (const f of flarePool) {
     if (!f.sprite.visible) continue;
-    f.life -= dt * 0.55;
+    f.life -= dt * 0.6;
     if (f.life <= 0) { f.sprite.visible = false; continue; }
-    f.vel.y -= 7.5 * dt;
-    f.vel.multiplyScalar(1 - 0.55 * dt);
+    f.vel.y -= 8 * dt;
+    f.vel.multiplyScalar(1 - 0.5 * dt);
     f.sprite.position.addScaledVector(f.vel, dt);
-    f.sprite.material.opacity = Math.min(1, f.life * 1.6);
-    f.sprite.material.color.setHSL(0.09, 1, 0.5 + f.life * 0.35);
+    f.sprite.material.opacity = Math.min(1, f.life * 1.7);
   }
 
-  // clouds drift
+  // --- clouds drift ---
   for (const c of clouds.children) {
     c.position.x += c.userData.drift * dt;
-    if (c.position.x > 220) c.position.x = -220;
+    if (c.position.x > 250) c.position.x = -250;
   }
 
-  // camera: cinematic chase with scroll pull-back + mouse parallax
+  // --- camera: side-chase that keeps jet, missile, and sun in play ---
   const scrollK = Math.min(scrollY / (window.innerHeight * 1.4), 1);
-  const camDist = 27 + scrollK * 26;
-  const camAng = t * 0.06 + scrollK * 1.2;
+  const camDist = 24 + scrollK * 26;
+  // camera sits opposite the sun so the jet is backlit and the sun sweeps through frame
+  const camAng = 0.55 + Math.sin(t * 0.05) * 0.4 + scrollK * 1.1;
   camera.position.set(
-    jetPos.x + Math.sin(camAng) * camDist + mouse.x * 2.4,
-    jetPos.y + 5.5 + scrollK * 9 - mouse.y * 2.0,
+    jetPos.x + Math.sin(camAng) * camDist + mouse.x * 2.6,
+    jetPos.y + 5 + scrollK * 9 - mouse.y * 2.2,
     jetPos.z + Math.cos(camAng) * camDist
   );
-  // frame the jet right-of-center: aim at a point left of it (screen-space)
   camera.lookAt(jetPos.x, jetPos.y + 1, jetPos.z);
   const left = new THREE.Vector3(-1, 0, 0).applyQuaternion(camera.quaternion);
   camera.lookAt(
-    jetPos.x + left.x * 7.5,
-    jetPos.y + 1 + left.y * 7.5,
-    jetPos.z + left.z * 7.5
+    jetPos.x + left.x * 6.5,
+    jetPos.y + 1 + left.y * 6.5,
+    jetPos.z + left.z * 6.5
   );
   camera.fov = 56 - scrollK * 9;
   camera.updateProjectionMatrix();
@@ -416,7 +450,5 @@ window.addEventListener("resize", () => {
 
 animate();
 
-// signal readiness (loader fade handled in main.js). Set a flag too, in
-// case main.js hasn't attached its listener yet (module load order race).
 window.__sasSceneReady = true;
 window.dispatchEvent(new Event("sas-scene-ready"));
