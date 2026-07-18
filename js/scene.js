@@ -5,10 +5,14 @@
 // procedural — no external assets.
 // ============================================================
 import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 
 const canvas = document.getElementById("scene");
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
@@ -17,6 +21,14 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x8a4a28, 0.0042);
 
 const camera = new THREE.PerspectiveCamera(56, window.innerWidth / window.innerHeight, 0.1, 900);
+
+// ---------------- cinematic post: bloom ----------------
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight), 0.55, 0.7, 0.78);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
 
 // ---------------- procedural textures ----------------
 function radialTex(inner, outer, size = 128) {
@@ -81,6 +93,26 @@ const SUN = new THREE.Vector3(-190, 30, -300);
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
   }));
   disc.position.copy(SUN); disc.scale.setScalar(56); scene.add(disc);
+  // anamorphic streak — thin horizontal blade of light through the sun
+  const streak = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: radialTex("rgba(255,220,170,0.85)", "rgba(255,160,90,0.25)", 256),
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+    opacity: 0.5,
+  }));
+  streak.position.copy(SUN); streak.scale.set(560, 7, 1); scene.add(streak);
+}
+
+// ---------------- depth haze veils ----------------
+{
+  for (let i = 0; i < 4; i++) {
+    const h = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: cloudTex, transparent: true, depthWrite: false,
+      color: 0xc27a4a, opacity: 0.05 + i * 0.012,
+    }));
+    h.position.set(-40 - i * 30, -4 + i * 3, -80 - i * 45);
+    h.scale.set(280 + i * 60, 90, 1);
+    scene.add(h);
+  }
 }
 
 // ---------------- lighting: teal & orange grade ----------------
@@ -167,62 +199,99 @@ const missileSmoke = new Trail(320, smokeTex, 0xd8cfc6);
 const wingVortL = new Trail(70, smokeTex, 0xf0e8e2);
 const wingVortR = new Trail(70, smokeTex, 0xf0e8e2);
 
-// ---------------- jet ----------------
+// ---------------- jet (sculpted) ----------------
 function buildJet() {
   const jet = new THREE.Group();
-  const hull = new THREE.MeshStandardMaterial({ color: 0x252a35, metalness: 0.85, roughness: 0.35, flatShading: true });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x12161f, metalness: 0.7, roughness: 0.45, flatShading: true });
+  const hull = new THREE.MeshStandardMaterial({ color: 0x2b3242, metalness: 0.72, roughness: 0.34 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x151a24, metalness: 0.65, roughness: 0.42 });
 
-  const fus = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.6, 7.4, 7), hull);
-  fus.rotation.x = Math.PI / 2; fus.scale.set(1, 1, 0.62); jet.add(fus);
-  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.34, 2.3, 7), hull);
-  nose.rotation.x = Math.PI / 2; nose.position.z = -4.8; nose.scale.set(1, 1, 0.62); jet.add(nose);
+  // fuselage — lathe-turned profile, nose to nozzle
+  const prof = [
+    [0.00, 0.0], [0.06, 0.25], [0.16, 0.9], [0.26, 1.8], [0.36, 2.9],
+    [0.44, 4.1], [0.47, 5.2], [0.46, 6.2], [0.42, 7.2], [0.34, 8.1], [0.27, 8.8], [0.24, 9.0],
+  ].map(([r, z]) => new THREE.Vector2(r, z));
+  const fusGeo = new THREE.LatheGeometry(prof, 24);
+  fusGeo.rotateX(-Math.PI / 2);           // axis -> z, nose at z=0
+  fusGeo.translate(0, 0, -4.5);           // center it: nose z=-4.5, tail z=+4.5
+  fusGeo.scale(1, 0.82, 1);               // slightly oval cross-section
+  const fus = new THREE.Mesh(fusGeo, hull);
+  jet.add(fus);
+
+  // canopy — sleek teardrop, glossy dark glass
   const canopy = new THREE.Mesh(
-    new THREE.SphereGeometry(0.42, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0x35201a, metalness: 0.95, roughness: 0.08 }));
-  canopy.scale.set(0.8, 0.55, 1.9); canopy.position.set(0, 0.28, -2.4); jet.add(canopy);
+    new THREE.SphereGeometry(0.4, 20, 14),
+    new THREE.MeshStandardMaterial({ color: 0x1a1208, metalness: 1.0, roughness: 0.05 }));
+  canopy.scale.set(0.72, 0.5, 2.2);
+  canopy.position.set(0, 0.4, -1.9);
+  jet.add(canopy);
 
+  // spine hump behind canopy (blended dorsal)
+  const spine = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 12), hull);
+  spine.scale.set(0.68, 0.32, 2.4);
+  spine.position.set(0, 0.16, 0.7);
+  jet.add(spine);
+
+  // cranked-delta wings — thin, swept
   const wingShape = new THREE.Shape();
-  wingShape.moveTo(0, 0); wingShape.lineTo(4.4, 2.6); wingShape.lineTo(4.4, 3.6);
-  wingShape.lineTo(0.4, 2.4); wingShape.closePath();
-  const wingGeo = new THREE.ExtrudeGeometry(wingShape, { depth: 0.1, bevelEnabled: false });
+  wingShape.moveTo(0.0, -0.6);
+  wingShape.lineTo(3.0, 1.9);      // leading edge sweep
+  wingShape.lineTo(4.35, 2.45);    // cranked outer panel
+  wingShape.lineTo(4.35, 3.05);    // tip chord
+  wingShape.lineTo(0.6, 2.75);     // trailing edge
+  wingShape.lineTo(0.0, 2.55);
+  wingShape.closePath();
+  const wingGeo = new THREE.ExtrudeGeometry(wingShape, { depth: 0.07, bevelEnabled: false });
+  wingGeo.rotateX(Math.PI / 2);
   const wingL = new THREE.Mesh(wingGeo, hull);
-  wingL.rotation.x = Math.PI / 2; wingL.position.set(0.25, 0, -1.4); jet.add(wingL);
-  const wingR = wingL.clone(); wingR.scale.x = -1; wingR.position.x = -0.25; jet.add(wingR);
+  wingL.position.set(0.3, -0.04, -0.9);
+  jet.add(wingL);
+  const wingR = wingL.clone(); wingR.scale.x = -1; wingR.position.x = -0.3; jet.add(wingR);
 
+  // canted twin tails
   const tailShape = new THREE.Shape();
-  tailShape.moveTo(0, 0); tailShape.lineTo(1.5, 0.4); tailShape.lineTo(1.9, 1.7);
-  tailShape.lineTo(0.9, 1.5); tailShape.closePath();
-  const tailGeo = new THREE.ExtrudeGeometry(tailShape, { depth: 0.08, bevelEnabled: false });
+  tailShape.moveTo(0, 0); tailShape.lineTo(1.35, 0.3); tailShape.lineTo(1.85, 1.75);
+  tailShape.lineTo(1.15, 1.6); tailShape.closePath();
+  const tailGeo = new THREE.ExtrudeGeometry(tailShape, { depth: 0.06, bevelEnabled: false });
   const tailL = new THREE.Mesh(tailGeo, dark);
-  tailL.rotation.y = Math.PI / 2; tailL.rotation.z = 0.5; tailL.position.set(0.62, 0.1, 1.7); jet.add(tailL);
+  tailL.rotation.y = Math.PI / 2; tailL.rotation.z = 0.42;
+  tailL.position.set(0.5, 0.12, 2.3); jet.add(tailL);
   const tailR = new THREE.Mesh(tailGeo, dark);
-  tailR.rotation.y = Math.PI / 2; tailR.rotation.z = -0.5; tailR.scale.z = -1;
-  tailR.position.set(-0.62, 0.1, 1.7); jet.add(tailR);
+  tailR.rotation.y = Math.PI / 2; tailR.rotation.z = -0.42; tailR.scale.z = -1;
+  tailR.position.set(-0.5, 0.12, 2.3); jet.add(tailR);
 
+  // horizontal stabilators
   const stabShape = new THREE.Shape();
-  stabShape.moveTo(0, 0); stabShape.lineTo(1.9, 0.9); stabShape.lineTo(1.9, 1.5);
-  stabShape.lineTo(0.3, 1.1); stabShape.closePath();
-  const stabGeo = new THREE.ExtrudeGeometry(stabShape, { depth: 0.07, bevelEnabled: false });
+  stabShape.moveTo(0, 0); stabShape.lineTo(1.7, 0.85); stabShape.lineTo(1.7, 1.4);
+  stabShape.lineTo(0.25, 1.05); stabShape.closePath();
+  const stabGeo = new THREE.ExtrudeGeometry(stabShape, { depth: 0.05, bevelEnabled: false });
+  stabGeo.rotateX(Math.PI / 2);
   const stabL = new THREE.Mesh(stabGeo, dark);
-  stabL.rotation.x = Math.PI / 2; stabL.position.set(0.3, 0, 2.2); jet.add(stabL);
+  stabL.position.set(0.3, -0.02, 2.85); jet.add(stabL);
   const stabR = stabL.clone(); stabR.scale.x = -1; stabR.position.x = -0.3; jet.add(stabR);
 
-  for (const sx of [-0.36, 0.36]) {
-    const noz = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.5, 8), dark);
-    noz.rotation.x = Math.PI / 2; noz.position.set(sx, -0.05, 3.75); jet.add(noz);
+  // intakes under the wing roots
+  for (const sx of [-0.42, 0.42]) {
+    const intake = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.34, 2.6), dark);
+    intake.position.set(sx, -0.3, -0.4);
+    jet.add(intake);
+  }
+
+  // twin nozzles
+  for (const sx of [-0.26, 0.26]) {
+    const noz = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.25, 0.55, 12), dark);
+    noz.rotation.x = Math.PI / 2; noz.position.set(sx, 0, 4.55); jet.add(noz);
   }
   const burners = [];
-  for (const sx of [-0.36, 0.36]) {
+  for (const sx of [-0.26, 0.26]) {
     const b = new THREE.Sprite(new THREE.SpriteMaterial({
       map: burnTex, transparent: true, depthWrite: false,
       blending: THREE.AdditiveBlending, color: 0xffc078,
     }));
-    b.position.set(sx, -0.05, 4.15); b.scale.setScalar(1.2); jet.add(b);
+    b.position.set(sx, 0, 4.95); b.scale.setScalar(1.15); jet.add(b);
     burners.push(b);
   }
   const burnerLight = new THREE.PointLight(0xff9040, 5, 24, 1.8);
-  burnerLight.position.set(0, 0, 4.4); jet.add(burnerLight);
+  burnerLight.position.set(0, 0, 5.1); jet.add(burnerLight);
   jet.userData = { burners, burnerLight };
   return jet;
 }
@@ -435,17 +504,22 @@ function animate() {
     jetPos.y + 1 + left.y * 6.5,
     jetPos.z + left.z * 6.5
   );
-  camera.fov = 56 - scrollK * 9;
+  // handheld micro-shake + slow dutch drift + fov breathing
+  camera.position.x += Math.sin(t * 13.7) * 0.045 + Math.sin(t * 7.3) * 0.03;
+  camera.position.y += Math.sin(t * 11.1) * 0.04 + Math.cos(t * 5.9) * 0.025;
+  camera.rotation.z += Math.sin(t * 0.31) * 0.012;
+  camera.fov = 56 - scrollK * 9 + Math.sin(t * 0.23) * 0.8;
   camera.updateProjectionMatrix();
 
   updateLensFlare();
-  renderer.render(scene, camera);
+  composer.render();
 }
 
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
 });
 
 animate();
