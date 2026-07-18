@@ -303,11 +303,11 @@ const jet = new THREE.Group();
     map: burnTex, transparent: true, depthWrite: false,
     blending: THREE.AdditiveBlending, color: 0xffc078,
   }));
-  b.position.set(0, 0.1, 5.0);
-  b.scale.setScalar(1.9);
+  b.position.set(0, 0.12, 4.85);
+  b.scale.setScalar(1.15);
   jet.add(b);
   const burnerLight = new THREE.PointLight(0xff9040, 5, 24, 1.8);
-  burnerLight.position.set(0, 0.1, 5.3);
+  burnerLight.position.set(0, 0.12, 5.2);
   jet.add(burnerLight);
   jet.userData = { burners: [b], burnerLight };
 }
@@ -446,7 +446,7 @@ function animate() {
   jet.rotateZ(bank);
   const { burners, burnerLight } = jet.userData;
   const flick = 0.9 + Math.random() * 0.4;
-  burners.forEach((b) => b.scale.setScalar(1.1 * flick));
+  burners.forEach((b) => b.scale.setScalar(1.15 * flick));
   burnerLight.intensity = 4.6 * flick;
 
   // wingtip vortices during hard banking
@@ -507,7 +507,9 @@ function animate() {
 
   // --- camera: side-chase that keeps jet, missile, and sun in play ---
   const scrollK = Math.min(scrollY / (window.innerHeight * 1.4), 1);
-  const camDist = 24 + scrollK * 26;
+  // narrower windows: pull back and center more so the jet never leaves frame
+  const aspectK = THREE.MathUtils.clamp(1440 / window.innerWidth, 1, 1.7);
+  const camDist = (18.5 + scrollK * 26) * aspectK;
   // camera sits opposite the sun so the jet is backlit and the sun sweeps through frame
   const camAng = 0.55 + Math.sin(t * 0.05) * 0.4 + scrollK * 1.1;
   // low camera: jet stays silhouetted against the sky, never seen from above
@@ -517,11 +519,13 @@ function animate() {
     jetPos.z + Math.cos(camAng) * camDist
   );
   camera.lookAt(jetPos.x, jetPos.y + 1.6, jetPos.z);
+  // frame the jet right-of-center and BELOW the title: aim left of and above it
+  const frameOff = 5.5 / aspectK;
   const left = new THREE.Vector3(-1, 0, 0).applyQuaternion(camera.quaternion);
   camera.lookAt(
-    jetPos.x + left.x * 6.5,
-    jetPos.y + 1 + left.y * 6.5,
-    jetPos.z + left.z * 6.5
+    jetPos.x + left.x * frameOff,
+    jetPos.y + 2.6 + left.y * frameOff,
+    jetPos.z + left.z * frameOff
   );
   // handheld micro-shake + slow dutch drift + fov breathing
   camera.position.x += Math.sin(t * 13.7) * 0.045 + Math.sin(t * 7.3) * 0.03;

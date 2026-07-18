@@ -46,10 +46,11 @@ export function loadViper({ url = "assets/f16.glb", length = 9.4, retint = true,
               m.metalness = 1.0;
               m.roughness = 0.06;
             } else {
-              // multiply the diffuse map toward black — panel lines survive
-              if (m.color) m.color.setRGB(0.30, 0.31, 0.35);
-              if ("metalness" in m) m.metalness = Math.max(m.metalness ?? 0, 0.45);
-              if ("roughness" in m) m.roughness = Math.min(m.roughness ?? 1, 0.55);
+              // multiply the diffuse map toward gunmetal — panel lines survive,
+              // sunset rim light has something to catch
+              if (m.color) m.color.setRGB(0.46, 0.47, 0.52);
+              if ("metalness" in m) m.metalness = Math.max(m.metalness ?? 0, 0.5);
+              if ("roughness" in m) m.roughness = Math.min(m.roughness ?? 1, 0.45);
             }
             m.needsUpdate = true;
           }
