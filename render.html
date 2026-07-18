@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <script type="importmap">
+    { "imports": { "three": "./js/vendor/three.module.js", "three/addons/": "./js/vendor/addons/" } }
+  </script>
+  <style>body{margin:0;background:#000}canvas{display:block}</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script type="module">
+// Offline film renderer — deterministic, seamlessly looping (period T).
+import * as THREE from "three";
+import { loadViper } from "./js/viper.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+
+const T = 10.0;                 // loop period seconds
+const OM = (2 * Math.PI) / T;   // base angular frequency — everything uses n*OM
+
+// deterministic PRNG
+function mulberry32(a) {
+  return function () {
+    let t = (a += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const rng = mulberry32(2026);
+
+const W = 1920, H = 1080;
+const canvas = document.getElementById("c");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(W, H, false);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x8a4a28, 0.0042);
+const camera = new THREE.PerspectiveCamera(56, W / H, 0.1, 900);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.6, 0.75, 0.76));
+composer.addPass(new OutputPass());
+composer.setSize(W, H);
+
+// ---------- textures ----------
+function radialTex(inner, outer, size = 128) {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const g = c.getContext("2d");
+  const grad = g.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+  grad.addColorStop(0, inner); grad.addColorStop(0.35, outer); grad.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = grad; g.fillRect(0, 0, size, size);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const softTex = radialTex("rgba(255,255,255,1)", "rgba(255,220,180,0.45)");
+const cloudTex = radialTex("rgba(255,225,200,0.55)", "rgba(150,110,110,0.18)", 256);
+const smokeTex = radialTex("rgba(235,225,215,0.85)", "rgba(120,100,95,0.30)", 128);
+const flareTex = radialTex("rgba(255,245,215,1)", "rgba(255,150,60,0.55)");
+const burnTex = radialTex("rgba(255,240,220,1)", "rgba(255,140,70,0.5)");
+
+// ---------- sky, sun, lights, clouds, haze (as live scene) ----------
+{
+  const c = document.createElement("canvas");
+  c.width = 4; c.height = 512;
+  const g = c.getContext("2d");
+  const grad = g.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0.00, "#131c33"); grad.addColorStop(0.42, "#3c2c47");
+  grad.addColorStop(0.60, "#8a4132"); grad.addColorStop(0.715, "#e07a35");
+  grad.addColorStop(0.76, "#ffb257"); grad.addColorStop(0.82, "#a04c22");
+  grad.addColorStop(1.00, "#341a10");
+  g.fillStyle = grad; g.fillRect(0, 0, 4, 512);
+  const skyTex = new THREE.CanvasTexture(c);
+  skyTex.colorSpace = THREE.SRGBColorSpace;
+  scene.add(new THREE.Mesh(new THREE.SphereGeometry(420, 48, 32),
+    new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false })));
+}
+const SUN = new THREE.Vector3(-190, 30, -300);
+for (const [inner, outer, s] of [
+  ["rgba(255,190,120,0.55)", "rgba(255,140,70,0.18)", 340],
+  ["rgba(255,215,150,0.9)", "rgba(255,160,80,0.35)", 150],
+  ["rgba(255,248,230,1)", "rgba(255,205,130,0.9)", 56],
+]) {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: radialTex(inner, outer, 256), transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, fog: false }));
+  sp.position.copy(SUN); sp.scale.setScalar(s); scene.add(sp);
+}
+{
+  const streak = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: radialTex("rgba(255,220,170,0.85)", "rgba(255,160,90,0.25)", 256),
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: 0.5 }));
+  streak.position.copy(SUN); streak.scale.set(560, 7, 1); scene.add(streak);
+}
+scene.add(new THREE.AmbientLight(0x3a2c3e, 1.0));
+const sunLight = new THREE.DirectionalLight(0xffa050, 3.4);
+sunLight.position.copy(SUN); scene.add(sunLight);
+const coolFill = new THREE.DirectionalLight(0x2e5a6e, 0.85);
+coolFill.position.set(190, 60, 300); scene.add(coolFill);
+
+const clouds = new THREE.Group();
+for (let i = 0; i < 85; i++) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: cloudTex, transparent: true, depthWrite: false,
+    opacity: 0.12 + rng() * 0.16,
+    color: new THREE.Color().setHSL(0.05 + rng() * 0.04, 0.5, 0.42 + rng() * 0.2) }));
+  s.position.set((rng() - 0.5) * 480, -34 - rng() * 38, (rng() - 0.5) * 480);
+  const sc = 42 + rng() * 85;
+  s.scale.set(sc, sc * 0.38, 1);
+  s.userData = { x0: s.position.x, amp: 3 + rng() * 5, ph: rng() * Math.PI * 2 };
+  clouds.add(s);
+}
+for (let i = 0; i < 14; i++) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: cloudTex, transparent: true, depthWrite: false,
+    opacity: 0.2 + rng() * 0.2, color: 0x5a3040, fog: false }));
+  const a = -0.55 - rng() * 0.5;
+  s.position.set(Math.sin(a) * 330, -8 + rng() * 34, Math.cos(a) * -330 + (rng() - 0.5) * 60);
+  const sc = 60 + rng() * 120;
+  s.scale.set(sc, sc * 0.55, 1);
+  s.userData = { x0: s.position.x, amp: 1, ph: 0 };
+  clouds.add(s);
+}
+scene.add(clouds);
+for (let i = 0; i < 4; i++) {
+  const h = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: cloudTex, transparent: true, depthWrite: false, color: 0xc27a4a, opacity: 0.05 + i * 0.012 }));
+  h.position.set(-40 - i * 30, -4 + i * 3, -80 - i * 45);
+  h.scale.set(280 + i * 60, 90, 1);
+  scene.add(h);
+}
+
+// ---------- trails ----------
+class Trail {
+  constructor(n, tex, color) {
+    this.pool = []; this.cursor = 0;
+    for (let i = 0; i < n; i++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: tex, transparent: true, depthWrite: false, opacity: 0, color }));
+      s.visible = false; scene.add(s);
+      this.pool.push({ s, life: 0, maxLife: 1, grow: 0, vel: new THREE.Vector3() });
+    }
+  }
+  emit(pos, scale, life, grow, jitter, vel, rand) {
+    const p = this.pool[this.cursor];
+    this.cursor = (this.cursor + 1) % this.pool.length;
+    p.life = p.maxLife = life; p.grow = grow;
+    p.s.visible = true; p.s.position.copy(pos);
+    if (jitter) p.s.position.add(new THREE.Vector3((rand()-0.5)*jitter, (rand()-0.5)*jitter, (rand()-0.5)*jitter));
+    p.s.scale.setScalar(scale);
+    p.vel.copy(vel || new THREE.Vector3());
+  }
+  update(dt) {
+    for (const p of this.pool) {
+      if (!p.s.visible) continue;
+      p.life -= dt;
+      if (p.life <= 0) { p.s.visible = false; continue; }
+      const k = p.life / p.maxLife;
+      p.s.material.opacity = 0.5 * k * k;
+      p.s.scale.addScalar(p.grow * dt);
+      p.s.position.addScaledVector(p.vel, dt);
+    }
+  }
+}
+const missileSmoke = new Trail(360, smokeTex, 0xd8cfc6);
+const wingVortL = new Trail(80, smokeTex, 0xf0e8e2);
+const wingVortR = new Trail(80, smokeTex, 0xf0e8e2);
+
+// ---------- jet + missile ----------
+const jet = new THREE.Group();
+{
+  const b = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: burnTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: 0xffc078 }));
+  b.position.set(0, 0.12, 4.85); b.scale.setScalar(1.15); jet.add(b);
+  const burnerLight = new THREE.PointLight(0xff9040, 5, 24, 1.8);
+  burnerLight.position.set(0, 0.12, 5.2); jet.add(burnerLight);
+  jet.userData = { burners: [b], burnerLight };
+}
+scene.add(jet);
+
+const missile = new THREE.Group();
+{
+  const body = new THREE.MeshStandardMaterial({ color: 0x8a8d94, metalness: 0.85, roughness: 0.3 });
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 2.6, 10), body);
+  m.rotation.x = Math.PI / 2; missile.add(m);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.55, 10), body);
+  tip.rotation.x = Math.PI / 2; tip.position.z = -1.55; missile.add(tip);
+  for (let i = 0; i < 4; i++) {
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.42, 0.5), body);
+    fin.position.z = 1.05; fin.rotation.z = (i * Math.PI) / 2;
+    fin.position.x = Math.cos((i * Math.PI) / 2) * 0.25;
+    fin.position.y = Math.sin((i * Math.PI) / 2) * 0.25;
+    missile.add(fin);
+  }
+  const ex = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: burnTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: 0xffd9a0 }));
+  ex.position.z = 1.55; ex.scale.setScalar(0.9); missile.add(ex);
+  const ml = new THREE.PointLight(0xffb060, 2.5, 14, 2);
+  ml.position.z = 1.7; missile.add(ml);
+  scene.add(missile);
+}
+
+// ---------- flares (deterministic bursts at fixed loop phases) ----------
+const flarePool = [];
+for (let i = 0; i < 90; i++) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: flareTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
+  s.visible = false; scene.add(s);
+  flarePool.push({ sprite: s, life: 0, vel: new THREE.Vector3() });
+}
+let flareCursor = 0;
+const flareLight = new THREE.PointLight(0xffc060, 0, 60, 1.6);
+scene.add(flareLight);
+const BURSTS = [ { at: 1.8, n: 9, seed: 11 }, { at: 6.3, n: 12, seed: 47 } ];
+function popFlares(count, seed) {
+  const r = mulberry32(seed);
+  const origin = new THREE.Vector3();
+  jet.getWorldPosition(origin);
+  const back = new THREE.Vector3(0, 0, 1).applyQuaternion(jet.quaternion);
+  for (let i = 0; i < count; i++) {
+    const f = flarePool[flareCursor];
+    flareCursor = (flareCursor + 1) % flarePool.length;
+    f.life = 1.15; f.sprite.visible = true;
+    f.sprite.position.copy(origin).addScaledVector(back, 3.2);
+    f.vel.set((r()-0.5)*11, -4 - r()*6, (r()-0.5)*11).addScaledVector(back, 10 + r()*6);
+    f.sprite.scale.setScalar(1.5 + r()*1.2);
+  }
+  flareLight.position.copy(origin).addScaledVector(back, 4);
+  flareLight.intensity = 46;
+}
+
+// ---------- lens flare ghosts ----------
+const lensGroup = new THREE.Group(); scene.add(lensGroup);
+const lensSprites = [];
+{
+  const colors = [0xffd9a8, 0xffb257, 0xff8a4a, 0x7fd8d0, 0xffe2c0];
+  const scales = [0.11, 0.05, 0.032, 0.065, 0.024];
+  const offsets = [0.32, 0.52, 0.7, 0.88, 1.06];
+  for (let i = 0; i < colors.length; i++) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: softTex, color: colors[i], transparent: true, opacity: 0.2,
+      depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, fog: false }));
+    s.scale.setScalar(scales[i]); lensGroup.add(s); lensSprites.push({ sprite: s, k: offsets[i] });
+  }
+}
+function updateLensFlare() {
+  const ndc = SUN.clone().project(camera);
+  const on = ndc.z < 1 && Math.abs(ndc.x) < 1.2 && Math.abs(ndc.y) < 1.2;
+  lensGroup.visible = on;
+  if (!on) return;
+  for (const { sprite, k } of lensSprites)
+    sprite.position.copy(new THREE.Vector3(ndc.x*(1-k), ndc.y*(1-k), 0.5).unproject(camera));
+}
+
+// ---------- deterministic simulation ----------
+const jetPos = new THREE.Vector3(), tmp = new THREE.Vector3();
+const mPos = new THREE.Vector3(), mAhead = new THREE.Vector3();
+function flightPos(t, out) {
+  const R = 27;
+  out.set(Math.sin(OM*t)*R, 5 + Math.sin(OM*t*2 + 1.1)*3.5, Math.sin(OM*t*2)*R*0.5);
+  return out;
+}
+const frameRand = (i) => mulberry32(9000 + i)();
+
+let firedBursts = new Set();
+let smokeAcc = 0, vortAcc = 0;
+function step(t, dt, frameIdx) {
+  // jet
+  flightPos(t, jetPos); flightPos(t + 0.12, tmp);
+  jet.position.copy(jetPos);
+  const dir = tmp.clone().sub(jetPos);
+  jet.lookAt(tmp); jet.rotateY(Math.PI);
+  const bank = THREE.MathUtils.clamp(-dir.x * 0.5, -1.15, 1.15);
+  jet.rotateZ(bank);
+  const flick = 0.9 + frameRand(frameIdx) * 0.4;
+  jet.userData.burners[0].scale.setScalar(1.15 * flick);
+  jet.userData.burnerLight.intensity = 4.6 * flick;
+
+  // vortices
+  vortAcc += dt;
+  if (Math.abs(bank) > 0.5 && vortAcc > 0.03) {
+    vortAcc = 0;
+    const q = jet.quaternion;
+    const r = mulberry32(3000 + frameIdx);
+    wingVortL.emit(new THREE.Vector3(2.95, 0, 1.5).applyQuaternion(q).add(jetPos), 0.5, 1.1, 1.4, 0.1, null, r);
+    wingVortR.emit(new THREE.Vector3(-2.95, 0, 1.5).applyQuaternion(q).add(jetPos), 0.5, 1.1, 1.4, 0.1, null, r);
+  }
+
+  // missile — kept well aft so it never balloons into the foreground
+  const lag = 1.05 + Math.sin(OM*t + 0.7) * 0.15;
+  flightPos(t - lag, mPos); flightPos(t - lag + 0.1, mAhead);
+  const weave = Math.sin(OM*t*3) * 1.0;
+  const wv = new THREE.Vector3(Math.cos(OM*t), 0.4*Math.sin(OM*t*2), 0).multiplyScalar(weave*0.5);
+  mPos.add(wv);
+  missile.position.copy(mPos);
+  missile.lookAt(mAhead.add(wv)); missile.rotateY(Math.PI);
+  {
+    // continuous smoke rope: several interpolated puffs per frame
+    const back = new THREE.Vector3(0, 0, 1.8).applyQuaternion(missile.quaternion).add(mPos);
+    if (!window.__prevBack) window.__prevBack = back.clone();
+    const K = 3;
+    for (let k = 1; k <= K; k++) {
+      const pos = window.__prevBack.clone().lerp(back, k / K);
+      missileSmoke.emit(pos, 0.8 + frameRand(frameIdx + 500 + k) * 0.25, 2.4, 1.7, 0.12,
+        new THREE.Vector3(0, 0.35, 0), mulberry32(4000 + frameIdx * 7 + k));
+    }
+    window.__prevBack.copy(back);
+  }
+  missileSmoke.update(dt); wingVortL.update(dt); wingVortR.update(dt);
+
+  // flares
+  const phase = ((t % T) + T) % T;
+  for (const bst of BURSTS) {
+    const key = Math.floor(t / T) + ":" + bst.at;
+    if (phase >= bst.at && phase < bst.at + dt * 1.5 && !firedBursts.has(key)) {
+      firedBursts.add(key);
+      popFlares(bst.n, bst.seed);
+    }
+  }
+  flareLight.intensity *= Math.pow(0.06, dt);
+  for (const f of flarePool) {
+    if (!f.sprite.visible) continue;
+    f.life -= dt * 0.6;
+    if (f.life <= 0) { f.sprite.visible = false; continue; }
+    f.vel.y -= 8 * dt; f.vel.multiplyScalar(1 - 0.5 * dt);
+    f.sprite.position.addScaledVector(f.vel, dt);
+    f.sprite.material.opacity = Math.min(1, f.life * 1.7);
+  }
+
+  // clouds sway (periodic)
+  for (const c of clouds.children)
+    c.position.x = c.userData.x0 + Math.sin(OM*t + c.userData.ph) * c.userData.amp;
+
+  // camera: slow arc, low, sun-side; all harmonics of OM
+  const camAng = 0.55 + Math.sin(OM*t) * 0.35;
+  const camDist = 19.5 + Math.sin(OM*t*2 + 0.5) * 1.5;
+  camera.position.set(
+    jetPos.x + Math.sin(camAng)*camDist,
+    jetPos.y + 1.6,
+    jetPos.z + Math.cos(camAng)*camDist);
+  camera.lookAt(jetPos.x, jetPos.y + 1.6, jetPos.z);
+  const frameOff = 5.5;
+  const left = new THREE.Vector3(-1, 0, 0).applyQuaternion(camera.quaternion);
+  camera.lookAt(jetPos.x + left.x*frameOff, jetPos.y + 2.4 + left.y*frameOff, jetPos.z + left.z*frameOff);
+  camera.position.x += Math.sin(OM*t*22)*0.04 + Math.sin(OM*t*12)*0.03;
+  camera.position.y += Math.sin(OM*t*18)*0.035 + Math.cos(OM*t*9)*0.025;
+  camera.rotation.z += Math.sin(OM*t)*0.01;
+  camera.fov = 55 + Math.sin(OM*t)*0.8;
+  camera.updateProjectionMatrix();
+  // never let the missile balloon in the foreground: shrink it near the camera
+  const md = missile.position.distanceTo(camera.position);
+  missile.scale.setScalar(THREE.MathUtils.clamp((md - 7) / 8, 0.001, 1));
+  updateLensFlare();
+}
+
+// ---------- driver API for the capture script ----------
+const FPS = 24;
+const DT = 1 / FPS;
+window.__ready = false;
+loadViper().then((v) => {
+  jet.add(v);
+  // warm-up: simulate one full loop so trails/flares are in steady state at t=0
+  let t = -T;
+  let fi = -T * FPS;
+  for (let i = 0; i < T * FPS; i++) { step(t, DT, Math.round(fi)); t += DT; fi++; }
+  window.__ready = true;
+});
+let simT = 0, simFrame = 0;
+window.__renderFrame = () => {
+  step(simT, DT, simFrame);
+  composer.render();
+  simT += DT; simFrame++;
+  return simFrame;
+};
+</script>
+</body>
+</html>

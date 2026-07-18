@@ -23,7 +23,7 @@ body {
   overflow-x: hidden;
 }
 
-/* 3D canvas sits behind everything */
+/* cinematic film loop sits behind everything */
 #scene {
   position: fixed;
   inset: 0;
@@ -31,6 +31,7 @@ body {
   height: 100vh;
   z-index: 0;
   display: block;
+  object-fit: cover;
 }
 #vignette {
   position: fixed;

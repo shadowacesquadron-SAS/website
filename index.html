@@ -26,8 +26,11 @@
   </script>
 </head>
 <body>
-  <!-- 3D background canvas (fixed, full viewport) -->
-  <canvas id="scene"></canvas>
+  <!-- Cinematic film loop background (offline-rendered, identical everywhere) -->
+  <video id="scene" autoplay muted loop playsinline preload="auto" poster="assets/hero_poster.jpg">
+    <source src="assets/hero_loop.webm" type="video/webm" />
+    <source src="assets/hero_loop.mp4" type="video/mp4" />
+  </video>
   <div id="vignette"></div>
 
   <!-- Loading screen -->
@@ -153,7 +156,16 @@
     </footer>
   </main>
 
-  <script type="module" src="js/scene.js"></script>
+  <script>
+    // hero film readiness -> loader dismissal (same signal the 3D scene used)
+    (function () {
+      const v = document.getElementById("scene");
+      function ready() { window.__sasSceneReady = true; window.dispatchEvent(new Event("sas-scene-ready")); }
+      if (v.readyState >= 3) ready();
+      else { v.addEventListener("canplay", ready, { once: true }); setTimeout(ready, 4000); }
+      v.play && v.play().catch(() => {});
+    })();
+  </script>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>
