@@ -5,6 +5,7 @@
 // procedural — no external assets.
 // ============================================================
 import * as THREE from "three";
+import { buildF16 } from "./f16.js";
 import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
@@ -295,7 +296,22 @@ function buildJet() {
   jet.userData = { burners, burnerLight };
   return jet;
 }
-const jet = buildJet();
+// SAS PLAYBOY Viper — lofted model, tail art from the actual DCS livery
+const tailTex = new THREE.TextureLoader().load("assets/tail_art.png");
+tailTex.colorSpace = THREE.SRGBColorSpace;
+const jet = buildF16({ tailTexture: tailTex });
+{
+  // single-engine afterburner sprite at the nozzle
+  const b = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: burnTex, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, color: 0xffc078,
+  }));
+  const tip = jet.userData.nozzleTip;
+  b.position.set(tip.x, tip.y, tip.z - 7.5 + 0.5); // inner-group frame
+  b.scale.setScalar(1.9);
+  jet.children[0].add(b);
+  jet.userData.burners.push(b);
+}
 scene.add(jet);
 
 // ---------------- missile ----------------
@@ -436,8 +452,8 @@ function animate() {
   if (Math.abs(bank) > 0.55 && vortAcc > 0.028) {
     vortAcc = 0;
     const q = jet.quaternion;
-    const tipL = new THREE.Vector3(4.5, 0, 1.2).applyQuaternion(q).add(jetPos);
-    const tipR = new THREE.Vector3(-4.5, 0, 1.2).applyQuaternion(q).add(jetPos);
+    const tipL = new THREE.Vector3(3.05, 0, 2.75).applyQuaternion(q).add(jetPos);
+    const tipR = new THREE.Vector3(-3.05, 0, 2.75).applyQuaternion(q).add(jetPos);
     wingVortL.emit(tipL, 0.5, 1.1, 1.4, 0.1);
     wingVortR.emit(tipR, 0.5, 1.1, 1.4, 0.1);
   }
