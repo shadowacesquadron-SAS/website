@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
 
-export function loadViper({ url = "assets/f16.glb", length = 9.4, retint = true, yaw = 0 } = {}) {
+export function loadViper({ url = "assets/f16.glb", length = 9.4, retint = true, yaw = 0, tailDecal = null } = {}) {
   return new Promise((resolve, reject) => {
     const draco = new DRACOLoader();
     draco.setDecoderPath("js/vendor/draco/");
@@ -57,6 +57,20 @@ export function loadViper({ url = "assets/f16.glb", length = 9.4, retint = true,
         });
       }
 
+      // SAS PLAYBOY tail art: alpha decal planes flush on both sides of the fin
+      if (tailDecal) {
+        const mat = new THREE.MeshStandardMaterial({
+          map: tailDecal, transparent: true, depthWrite: false,
+          metalness: 0.3, roughness: 0.6,
+          polygonOffset: true, polygonOffsetFactor: -2,
+        });
+        for (const sx of [1, -1]) {
+          const plane = new THREE.Mesh(new THREE.PlaneGeometry(1.55, 1.35), mat);
+          plane.rotation.y = sx * Math.PI / 2;
+          plane.position.set(sx * 0.09, 1.62, -3.85); // this GLB's fin is at -z (nose +z)
+          wrap.add(plane);
+        }
+      }
       wrap.userData.size = size.clone().multiplyScalar(s);
       resolve(wrap);
     }, undefined, reject);

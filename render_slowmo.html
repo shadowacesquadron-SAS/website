@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <script type="importmap">
+    { "imports": { "three": "./js/vendor/three.module.js", "three/addons/": "./js/vendor/addons/" } }
+  </script>
+  <style>body{margin:0;background:#000}canvas{display:block}</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script type="module">
+// EXTREME SLOW MOTION: F-16 flying out of an explosion, golden hour, dropping flares.
+// Seamless loop, period T. High-speed-camera look: crisp, slow roil, everything periodic.
+import * as THREE from "three";
+import { loadViper } from "./js/viper.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+
+const T = 16.0;
+const OM = (2 * Math.PI) / T;
+function mulberry32(a){return function(){let t=(a+=0x6d2b79f5);t=Math.imul(t^(t>>>15),t|1);t^=t+Math.imul(t^(t>>>7),t|61);return((t^(t>>>14))>>>0)/4294967296;};}
+const rng = mulberry32(777);
+
+const W = 1920, H = 1080;
+const canvas = document.getElementById("c");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(W, H, false);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.02;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x8a4a28, 0.0038);
+const camera = new THREE.PerspectiveCamera(46, W / H, 0.1, 900);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.65, 0.8, 0.74));
+composer.addPass(new OutputPass());
+composer.setSize(W, H);
+
+function radialTex(inner, outer, size = 128) {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const g = c.getContext("2d");
+  const grad = g.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+  grad.addColorStop(0, inner); grad.addColorStop(0.35, outer); grad.addColorStop(1, "rgba(0,0,0,0)");
+  g.fillStyle = grad; g.fillRect(0, 0, size, size);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const softTex   = radialTex("rgba(255,255,255,1)", "rgba(255,220,180,0.45)");
+const cloudTex  = radialTex("rgba(255,225,200,0.55)", "rgba(150,110,110,0.18)", 256);
+const smokeTex  = radialTex("rgba(235,225,215,0.85)", "rgba(120,100,95,0.30)", 128);
+const darkSmoke = radialTex("rgba(70,50,45,0.9)", "rgba(40,28,26,0.45)", 256);
+const fireHot   = radialTex("rgba(255,252,235,1)", "rgba(255,190,90,0.7)");
+const fireMid   = radialTex("rgba(255,180,80,0.95)", "rgba(230,90,30,0.5)", 256);
+const flareTex  = radialTex("rgba(255,245,215,1)", "rgba(255,150,60,0.55)");
+const burnTex   = radialTex("rgba(255,240,220,1)", "rgba(255,140,70,0.5)");
+
+// ---------- sky / sun / lights ----------
+{
+  const c = document.createElement("canvas");
+  c.width = 4; c.height = 512;
+  const g = c.getContext("2d");
+  const grad = g.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0.00, "#101828"); grad.addColorStop(0.40, "#3c2a44");
+  grad.addColorStop(0.58, "#8a4132"); grad.addColorStop(0.70, "#e07a35");
+  grad.addColorStop(0.755, "#ffb257"); grad.addColorStop(0.82, "#a04c22");
+  grad.addColorStop(1.00, "#2e170e");
+  g.fillStyle = grad; g.fillRect(0, 0, 4, 512);
+  const skyTex = new THREE.CanvasTexture(c);
+  skyTex.colorSpace = THREE.SRGBColorSpace;
+  scene.add(new THREE.Mesh(new THREE.SphereGeometry(420, 48, 32),
+    new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false })));
+}
+const SUN = new THREE.Vector3(-210, 26, -280);
+for (const [inner, outer, s] of [
+  ["rgba(255,190,120,0.5)", "rgba(255,140,70,0.16)", 320],
+  ["rgba(255,215,150,0.9)", "rgba(255,160,80,0.35)", 140],
+  ["rgba(255,248,230,1)", "rgba(255,205,130,0.9)", 52],
+]) {
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: radialTex(inner, outer, 256), transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, fog: false }));
+  sp.position.copy(SUN); sp.scale.setScalar(s); scene.add(sp);
+}
+{
+  const streak = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: radialTex("rgba(255,220,170,0.8)", "rgba(255,160,90,0.22)", 256),
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, opacity: 0.45 }));
+  streak.position.copy(SUN); streak.scale.set(520, 6.5, 1); scene.add(streak);
+}
+scene.add(new THREE.AmbientLight(0x40303c, 1.0));
+const sunLight = new THREE.DirectionalLight(0xffa050, 2.9);
+sunLight.position.copy(SUN); scene.add(sunLight);
+const coolFill = new THREE.DirectionalLight(0x2e5a6e, 0.7);
+coolFill.position.set(190, 60, 300); scene.add(coolFill);
+
+// distant cloud band + haze
+const clouds = new THREE.Group();
+for (let i = 0; i < 60; i++) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: cloudTex, transparent: true, depthWrite: false,
+    opacity: 0.10 + rng() * 0.14,
+    color: new THREE.Color().setHSL(0.05 + rng() * 0.04, 0.5, 0.40 + rng() * 0.2) }));
+  s.position.set((rng() - 0.5) * 480, -40 - rng() * 36, (rng() - 0.5) * 480);
+  const sc = 46 + rng() * 90;
+  s.scale.set(sc, sc * 0.36, 1);
+  s.userData = { x0: s.position.x, amp: 2 + rng() * 3, ph: rng() * Math.PI * 2 };
+  clouds.add(s);
+}
+scene.add(clouds);
+for (let i = 0; i < 4; i++) {
+  const h = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: cloudTex, transparent: true, depthWrite: false, color: 0xc27a4a, opacity: 0.045 + i * 0.012 }));
+  h.position.set(-30 - i * 34, -6 + i * 3, -80 - i * 45);
+  h.scale.set(280 + i * 60, 90, 1);
+  scene.add(h);
+}
+
+// ---------- THE EXPLOSION: roiling frozen fireball ----------
+const EXP = new THREE.Vector3(1.5, 2.0, -12);   // behind the jet (tail = -z on this model)
+const fireball = new THREE.Group();
+const fireBits = [];
+function addBit(tex, blending, baseScale, spread, opacity, colorJitter) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: tex, transparent: true, depthWrite: false, blending, opacity }));
+  if (colorJitter) s.material.color.setHSL(0.05 + rng()*0.03, 0.9, 0.5 + rng()*0.2);
+  const off = new THREE.Vector3((rng()-0.5)*2, (rng()-0.5)*2, (rng()-0.5)*2).multiplyScalar(spread);
+  s.position.copy(off);
+  fireball.add(s);
+  fireBits.push({
+    s, off, baseScale,
+    phs: [rng()*Math.PI*2, rng()*Math.PI*2, rng()*Math.PI*2],
+    n: 1 + Math.floor(rng()*3),          // roil harmonic (integer => loop-safe)
+    rot0: rng()*Math.PI*2,
+    baseOp: opacity * (0.75 + rng()*0.5),
+  });
+}
+// hot core
+for (let i = 0; i < 5; i++) addBit(fireHot, THREE.AdditiveBlending, 5 + rng()*3, 1.6, 0.85);
+// mid fire
+for (let i = 0; i < 16; i++) addBit(fireMid, THREE.AdditiveBlending, 7 + rng()*6, 4.2, 0.6, true);
+// dark smoke crown + dirty base (normal blending)
+for (let i = 0; i < 22; i++) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: darkSmoke, transparent: true, depthWrite: false, opacity: 0.38 + rng()*0.22 }));
+  const off = new THREE.Vector3((rng()-0.5)*10, -2 + rng()*11, (rng()-0.5)*7);
+  s.position.copy(off);
+  fireball.add(s);
+  fireBits.push({ s, off, baseScale: 9 + rng()*7, phs: [rng()*6.28, rng()*6.28, rng()*6.28],
+    n: 1, rot0: rng()*6.28, baseOp: s.material.opacity, smoke: true });
+}
+fireball.position.copy(EXP);
+scene.add(fireball);
+const expLight = new THREE.PointLight(0xff7a30, 55, 90, 1.6);
+expLight.position.copy(EXP);
+scene.add(expLight);
+
+// embers streaming slowly outward (wrapped, faded at ends => seamless)
+const embers = [];
+for (let i = 0; i < 46; i++) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: softTex, color: 0xffa050, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, opacity: 0 }));
+  const dir = new THREE.Vector3(rng()-0.5, (rng()-0.35), rng()-0.5).normalize();
+  scene.add(s);
+  embers.push({ s, dir, ph: rng(), spd: 0.6 + rng()*0.7, sc: 0.22 + rng()*0.4 });
+}
+
+// ---------- jet (near-static, slow-motion crawl) ----------
+const jet = new THREE.Group();
+{
+  const b = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: burnTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: 0xffc078 }));
+  b.position.set(0, 0.12, -4.85); b.scale.setScalar(1.05); jet.add(b);  // nose = +z on this model
+  const burnerLight = new THREE.PointLight(0xff9040, 4.5, 22, 1.8);
+  burnerLight.position.set(0, 0.12, -5.2); jet.add(burnerLight);
+  jet.userData = { burners: [b], burnerLight };
+}
+scene.add(jet);
+
+// ---------- slow-motion flares ----------
+const flares = [];
+for (let i = 0; i < 40; i++) {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: flareTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 }));
+  s.visible = false; scene.add(s);
+  flares.push({ s, born: -1, vel: new THREE.Vector3(), seed: 0 });
+}
+let flareCursor = 0;
+const FLARE_EVERY = 1.0;     // one flare per second of film time
+const FLARE_LIFE = 6.0;
+const flareSmoke = new (class {
+  constructor(n) {
+    this.pool = []; this.cursor = 0;
+    for (let i = 0; i < n; i++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: smokeTex, transparent: true, depthWrite: false, opacity: 0, color: 0xcdbfae }));
+      s.visible = false; scene.add(s);
+      this.pool.push({ s, life: 0, maxLife: 1 });
+    }
+  }
+  emit(pos, scale, life) {
+    const p = this.pool[this.cursor];
+    this.cursor = (this.cursor + 1) % this.pool.length;
+    p.life = p.maxLife = life;
+    p.s.visible = true; p.s.position.copy(pos); p.s.scale.setScalar(scale);
+  }
+  update(dt) {
+    for (const p of this.pool) {
+      if (!p.s.visible) continue;
+      p.life -= dt;
+      if (p.life <= 0) { p.s.visible = false; continue; }
+      const k = p.life / p.maxLife;
+      p.s.material.opacity = 0.22 * k;
+      p.s.scale.addScalar(0.5 * dt);
+      p.s.position.y += 0.25 * dt;
+    }
+  }
+})(700);
+
+function spawnFlare(t) {
+  const f = flares[flareCursor];
+  flareCursor = (flareCursor + 1) % flares.length;
+  const r = mulberry32(Math.round((((t % T) + T) % T) * 100) + 55);
+  f.born = t; f.seed = r() * 1000;
+  f.s.visible = true;
+  const back = new THREE.Vector3(0, -0.2, -3.4).applyQuaternion(jet.quaternion).add(jet.position);
+  f.s.position.copy(back);
+  // slow-motion ejection: gentle down-back fan
+  f.vel.set((r()-0.5)*1.6, -0.7 - r()*0.7, 1.2 + r()*0.8);
+  f.s.scale.setScalar(0.9 + r()*0.5);
+}
+
+// ---------- lens ghosts ----------
+const lensGroup = new THREE.Group(); scene.add(lensGroup);
+const lensSprites = [];
+{
+  const colors = [0xffd9a8, 0xffb257, 0xff8a4a, 0x7fd8d0, 0xffe2c0];
+  const scales = [0.10, 0.045, 0.03, 0.06, 0.022];
+  const offsets = [0.32, 0.52, 0.7, 0.88, 1.06];
+  for (let i = 0; i < colors.length; i++) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: softTex, color: colors[i], transparent: true, opacity: 0.18,
+      depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, fog: false }));
+    s.scale.setScalar(scales[i]); lensGroup.add(s); lensSprites.push({ sprite: s, k: offsets[i] });
+  }
+}
+function updateLensFlare() {
+  const ndc = SUN.clone().project(camera);
+  const on = ndc.z < 1 && Math.abs(ndc.x) < 1.25 && Math.abs(ndc.y) < 1.25;
+  lensGroup.visible = on;
+  if (!on) return;
+  for (const { sprite, k } of lensSprites)
+    sprite.position.copy(new THREE.Vector3(ndc.x*(1-k), ndc.y*(1-k), 0.5).unproject(camera));
+}
+
+// ---------- simulation ----------
+const frameRand = (i) => mulberry32(9000 + i)();
+let lastFlareSlot = -1;
+
+function step(t, dt, frameIdx) {
+  // jet: slow crawl forward (periodic micro-drift), gentle bank breathing
+  jet.position.set(
+    Math.sin(OM*t) * 0.5,
+    Math.sin(OM*t*2 + 0.8) * 0.35,
+    Math.sin(OM*t + 2.1) * 0.9        // creeps along its axis, returns
+  );
+  jet.rotation.set(0, 0, 0);
+  jet.rotateY(0);                      // nose stays -z
+  jet.rotateX(Math.sin(OM*t*2) * 0.03 - 0.04);
+  jet.rotateZ(Math.sin(OM*t) * 0.10 + 0.16);   // held bank, breathing
+  const flick = 0.92 + frameRand(frameIdx) * 0.3;
+  jet.userData.burners[0].scale.setScalar(1.05 * flick);
+  jet.userData.burnerLight.intensity = 4.2 * flick;
+
+  // fireball roil (all harmonics of OM)
+  for (const b of fireBits) {
+    const [p1, p2, p3] = b.phs;
+    const k = 1 + 0.16 * Math.sin(OM*t*b.n + p1);
+    b.s.scale.setScalar(b.baseScale * k);
+    b.s.position.set(
+      b.off.x + Math.sin(OM*t*b.n + p2) * 0.7,
+      b.off.y + Math.sin(OM*t + p3) * (b.smoke ? 1.0 : 0.5) + (b.smoke ? 0 : 0),
+      b.off.z + Math.cos(OM*t*b.n + p2) * 0.5
+    );
+    b.s.material.rotation = b.rot0 + Math.sin(OM*t + p1) * 0.10;
+    b.s.material.opacity = b.baseOp * (0.85 + 0.15 * Math.sin(OM*t*(b.n+1) + p3));
+  }
+  expLight.intensity = 52 + Math.sin(OM*t*3) * 8 + frameRand(frameIdx + 77) * 6;
+
+  // embers
+  for (const e of embers) {
+    const frac = ((t * e.spd / 14) + e.ph) % 1;
+    const r = 5 + frac * 16;
+    e.s.position.copy(EXP).addScaledVector(e.dir, r);
+    e.s.material.opacity = Math.sin(Math.PI * frac) * 0.7;
+    e.s.scale.setScalar(e.sc * (1 - frac * 0.4));
+  }
+
+  // flares: spawn on fixed slots of film time
+  const slot = Math.floor(t / FLARE_EVERY);
+  if (slot !== lastFlareSlot) { lastFlareSlot = slot; spawnFlare(slot * FLARE_EVERY); }
+  for (const f of flares) {
+    if (!f.s.visible) continue;
+    const age = t - f.born;
+    if (age > FLARE_LIFE || age < 0) { f.s.visible = false; continue; }
+    f.vel.y -= 0.55 * dt;              // slow-motion gravity
+    f.vel.multiplyScalar(1 - 0.12 * dt);
+    f.s.position.addScaledVector(f.vel, dt);
+    const k = 1 - age / FLARE_LIFE;
+    f.s.material.opacity = Math.min(1, k * 2.2);
+    // hot core shimmer
+    f.s.material.color.setHSL(0.08, 1.0, 0.62 + 0.12 * Math.sin(OM*t*6 + f.seed));
+    flareSmoke.emit(f.s.position, 0.55 + 0.3 * (1 - k), 3.4);
+  }
+  flareSmoke.update(dt);
+
+  // clouds sway
+  for (const c of clouds.children)
+    c.position.x = c.userData.x0 + Math.sin(OM*t + c.userData.ph) * c.userData.amp;
+
+  // camera: ultra-slow lateral dolly, low, close — high-speed-camera feel
+  const ang = 0.72 + Math.sin(OM*t) * 0.10;
+  const dist = 13.2 + Math.sin(OM*t + 1.3) * 0.6;
+  camera.position.set(
+    jet.position.x + Math.sin(ang) * dist,
+    jet.position.y + 0.4 + Math.sin(OM*t*2) * 0.2,
+    jet.position.z + Math.cos(ang) * dist        // front-quarter: nose toward camera, fireball behind
+  );
+  camera.lookAt(jet.position.x, jet.position.y + 0.8, jet.position.z);
+  const frameOff = 2.4;
+  const left = new THREE.Vector3(-1, 0, 0).applyQuaternion(camera.quaternion);
+  camera.lookAt(
+    jet.position.x + left.x * frameOff,
+    jet.position.y + 0.8 + left.y * frameOff,
+    jet.position.z + left.z * frameOff);
+  // micro handheld (harmonics of OM)
+  camera.position.x += Math.sin(OM*t*20) * 0.012;
+  camera.position.y += Math.sin(OM*t*16) * 0.010;
+  camera.rotation.z += Math.sin(OM*t) * 0.006;
+  camera.updateProjectionMatrix();
+  updateLensFlare();
+}
+
+// ---------- driver ----------
+const FPS = 24, DT = 1 / FPS;
+window.__ready = false;
+const tailDecal = new THREE.TextureLoader().load("assets/tail_decal.png");
+tailDecal.colorSpace = THREE.SRGBColorSpace;
+loadViper({ tailDecal }).then((v) => {
+  jet.add(v);
+  let t = -T, fi = -T * FPS;
+  for (let i = 0; i < T * FPS; i++) { step(t, DT, Math.round(fi)); t += DT; fi++; }
+  window.__ready = true;
+});
+let simT = 0, simFrame = 0;
+window.__renderFrame = () => {
+  step(simT, DT, simFrame);
+  composer.render();
+  simT += DT; simFrame++;
+  return simFrame;
+};
+window.__skipFrame = () => {   // advance simulation without rendering (fast resume)
+  step(simT, DT, simFrame);
+  simT += DT; simFrame++;
+  return simFrame;
+};
+</script>
+</body>
+</html>
