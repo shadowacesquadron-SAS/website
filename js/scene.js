@@ -492,12 +492,13 @@ function animate() {
   const camDist = 24 + scrollK * 26;
   // camera sits opposite the sun so the jet is backlit and the sun sweeps through frame
   const camAng = 0.55 + Math.sin(t * 0.05) * 0.4 + scrollK * 1.1;
+  // low camera: jet stays silhouetted against the sky, never seen from above
   camera.position.set(
     jetPos.x + Math.sin(camAng) * camDist + mouse.x * 2.6,
-    jetPos.y + 5 + scrollK * 9 - mouse.y * 2.2,
+    jetPos.y + 1.6 + scrollK * 9 - mouse.y * 1.8,
     jetPos.z + Math.cos(camAng) * camDist
   );
-  camera.lookAt(jetPos.x, jetPos.y + 1, jetPos.z);
+  camera.lookAt(jetPos.x, jetPos.y + 1.6, jetPos.z);
   const left = new THREE.Vector3(-1, 0, 0).applyQuaternion(camera.quaternion);
   camera.lookAt(
     jetPos.x + left.x * 6.5,
